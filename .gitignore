@@ -1,7 +1,8 @@
-results/
-logs_*/
+**/results/
+**/logs_*/
 *.log
 *.jsonl
 __pycache__/
-.claude_config/
+**/.claude_config/
 .env
+**/.env
