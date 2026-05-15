@@ -1,0 +1,21 @@
+# Triton 算子合规性检查配置
+
+flaggems_dir: /workspace/FlagGems_minimax_2_7
+worktree: .worktrees/gen-__and__
+
+# 检查范围配置
+scan:
+  # 是否检查 src/flag_gems/ops/ 下的 NVIDIA 算子
+  nvidia_ops: true
+  # 要检查的国产厂商 backend 列表，留空=全部，指定如 [_metax, _cambricon]
+  backends: []
+
+# Claude Code CLI 配置
+claude:
+  bin: claude
+  model: MiniMax-M2.5
+  max_concurrent: 4
+  timeout: 120
+
+# 输出
+output_dir: results
