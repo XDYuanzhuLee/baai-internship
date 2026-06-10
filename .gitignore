@@ -1,5 +1,6 @@
 # 运行时输出
 results/
+**/logs/
 **/logs_*/
 *.log
 *.jsonl
