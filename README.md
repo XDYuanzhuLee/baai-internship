@@ -13,6 +13,7 @@ BAAI 实习期间积累的各类自动化脚本和工具集合。
 | [github_reviews](./github_reviews/) | GitHub PR Review 抓取 — 批量拉取指定 PR 的 review comments 并生成报告 | `./github_reviews/fetch_reviews.sh` |
 | [anti_hack](./anti_hack/) | FlagGems 反作弊检查 — 检测算子实现中的 anti-hack 模式（wrapper 绕过 dual-execution） | `./anti_hack/anti_hack.py` |
 | [ds_proxy](./ds_proxy/) | DeepSeek API 代理 — Node.js 代理服务，转发 API 请求 | `./ds_proxy/ds-proxy.js` |
+| [skills](./skills/) | Agent skills 集合 — 当前包含 FlagGems 算子 PR 提交 skill，封装规范名查询、代码提取、门禁验证、PR 创建和回填 | `./skills/flaggems-pr-submit/SKILL.md` |
 
 ## 使用方式
 
