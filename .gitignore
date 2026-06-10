@@ -1,9 +1,11 @@
 # 运行时输出
 results/
+reports/
 **/logs/
 **/logs_*/
 *.log
 *.jsonl
+output.md
 
 # Python
 __pycache__/
