@@ -52,49 +52,173 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
-def scan_operators(config: dict) -> list[dict]:
+def load_ops_list(path: str) -> list[str]:
+    """Load operator names from a text file."""
+    ops = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                if line.startswith("aten::"):
+                    line = line[len("aten::"):]
+                if "." in line:
+                    line = line.split(".")[0]
+                if line and line not in ops:
+                    ops.append(line)
+    return ops
+
+
+def find_op_file_in_dir(ops_dir: Path, op_name: str) -> Path | None:
+    """Find the actual .py file for an operator in a directory.
+
+    Handles naming variations: op_name='triu_' -> triu.py or triu_.py,
+    op_name='_weight_norm' -> weightnorm.py or _weight_norm.py, etc.
+    """
+    candidates = [
+        ops_dir / f"{op_name}.py",
+        ops_dir / f"{op_name.strip('_')}.py",
+        ops_dir / f"{op_name.replace('_', '')}.py",
+        ops_dir / f"{op_name.lstrip('_')}.py",
+        ops_dir / f"{op_name.rstrip('_')}.py",
+        ops_dir / f"{op_name.lower()}.py",
+        ops_dir / f"{op_name.lower().replace('_', '')}.py",
+    ]
+    # For names like avg_pool3d_backward -> avg_pool3d.py
+    if "_backward" in op_name:
+        base_name = op_name.replace("_backward", "")
+        candidates.append(ops_dir / f"{base_name}.py")
+    # For CamelCase like Add_Softmax -> add_softmax.py
+    candidates.append(ops_dir / f"{op_name.lower()}.py")
+
+    for c in candidates:
+        if c.is_file():
+            return c
+
+    # Fallback: find any new .py file via git diff
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "master", "--diff-filter=A"],
+            cwd=str(ops_dir.parent.parent.parent.parent),
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.strip().split("\n"):
+            if line.startswith("src/flag_gems/ops/") and line.endswith(".py") and "__" not in line:
+                p = ops_dir.parent.parent.parent.parent / line
+                if p.is_file():
+                    return p
+    except Exception:
+        pass
+
+    return None
+
+
+def scan_operators(config: dict, ops_filter: list[str] = None) -> list[dict]:
     """Scan operator files based on config. Returns list of {name, file, vendor, path}."""
     flaggems_dir = Path(config["flaggems_dir"])
-    worktree = config.get("worktree", "")
-    base = flaggems_dir / worktree if worktree else flaggems_dir
+    scan_mode = config.get("scan_mode", "single_worktree")
     scan_cfg = config.get("scan", {})
     operators = []
 
-    # NVIDIA ops
-    if scan_cfg.get("nvidia_ops", True):
-        ops_dir = base / "src" / "flag_gems" / "ops"
-        if ops_dir.is_dir():
-            for f in sorted(ops_dir.glob("*.py")):
-                if f.name.startswith("__"):
-                    continue
-                operators.append({
-                    "name": f.stem,
-                    "file": str(f.relative_to(base)),
-                    "vendor": "nvidia",
-                    "path": str(f),
-                })
+    if scan_mode == "multi_worktree":
+        # Each operator has its own worktree
+        pattern = config.get("worktree_pattern", ".worktrees/gen-{op}")
+        if not ops_filter:
+            logger.error("multi_worktree mode requires --ops-list or -o to specify operators")
+            return []
 
-    # Backend vendors
-    backends_cfg = scan_cfg.get("backends", [])
-    backend_dir = base / "src" / "flag_gems" / "runtime" / "backend"
-    if backend_dir.is_dir():
-        for vendor_dir in sorted(backend_dir.iterdir()):
-            if not vendor_dir.is_dir() or vendor_dir.name.startswith("__"):
+        for op_name in ops_filter:
+            wt_rel = pattern.replace("{op}", op_name)
+            base = flaggems_dir / wt_rel
+
+            if not base.is_dir():
+                logger.warning(f"Worktree not found for {op_name}: {base}")
                 continue
-            if backends_cfg and vendor_dir.name not in backends_cfg:
-                continue
-            ops_subdir = vendor_dir / "ops"
-            if not ops_subdir.is_dir():
-                continue
-            for f in sorted(ops_subdir.glob("*.py")):
-                if f.name.startswith("__"):
+
+            # Try nvidia ops dir
+            if scan_cfg.get("nvidia_ops", True):
+                ops_dir = base / "src" / "flag_gems" / "ops"
+                if ops_dir.is_dir():
+                    op_file = find_op_file_in_dir(ops_dir, op_name)
+                    if op_file:
+                        operators.append({
+                            "name": op_name,
+                            "file": str(op_file.relative_to(base)),
+                            "vendor": "nvidia",
+                            "path": str(op_file),
+                        })
+                        continue
+
+            # Try backend vendor dirs
+            backend_dir = base / "src" / "flag_gems" / "runtime" / "backend"
+            if backend_dir.is_dir():
+                backends_cfg = scan_cfg.get("backends", [])
+                for vendor_dir in sorted(backend_dir.iterdir()):
+                    if not vendor_dir.is_dir() or vendor_dir.name.startswith("__"):
+                        continue
+                    if backends_cfg and vendor_dir.name not in backends_cfg:
+                        continue
+                    ops_subdir = vendor_dir / "ops"
+                    if not ops_subdir.is_dir():
+                        continue
+                    op_file = find_op_file_in_dir(ops_subdir, op_name)
+                    if op_file:
+                        operators.append({
+                            "name": op_name,
+                            "file": str(op_file.relative_to(base)),
+                            "vendor": vendor_dir.name.strip("_"),
+                            "path": str(op_file),
+                        })
+                        break
+
+            if not any(o["name"] == op_name for o in operators):
+                logger.warning(f"No operator file found for {op_name} in {base}")
+
+    else:
+        # Original single_worktree mode
+        worktree = config.get("worktree", "")
+        base = flaggems_dir / worktree if worktree else flaggems_dir
+
+        # NVIDIA ops
+        if scan_cfg.get("nvidia_ops", True):
+            ops_dir = base / "src" / "flag_gems" / "ops"
+            if ops_dir.is_dir():
+                for f in sorted(ops_dir.glob("*.py")):
+                    if f.name.startswith("__"):
+                        continue
+                    op_name = f.stem
+                    if ops_filter and op_name not in ops_filter:
+                        continue
+                    operators.append({
+                        "name": op_name,
+                        "file": str(f.relative_to(base)),
+                        "vendor": "nvidia",
+                        "path": str(f),
+                    })
+
+        # Backend vendors
+        backends_cfg = scan_cfg.get("backends", [])
+        backend_dir = base / "src" / "flag_gems" / "runtime" / "backend"
+        if backend_dir.is_dir():
+            for vendor_dir in sorted(backend_dir.iterdir()):
+                if not vendor_dir.is_dir() or vendor_dir.name.startswith("__"):
                     continue
-                operators.append({
-                    "name": f.stem,
-                    "file": str(f.relative_to(base)),
-                    "vendor": vendor_dir.name.strip("_"),
-                    "path": str(f),
-                })
+                if backends_cfg and vendor_dir.name not in backends_cfg:
+                    continue
+                ops_subdir = vendor_dir / "ops"
+                if not ops_subdir.is_dir():
+                    continue
+                for f in sorted(ops_subdir.glob("*.py")):
+                    if f.name.startswith("__"):
+                        continue
+                    op_name = f.stem
+                    if ops_filter and op_name not in ops_filter:
+                        continue
+                    operators.append({
+                        "name": op_name,
+                        "file": str(f.relative_to(base)),
+                        "vendor": vendor_dir.name.strip("_"),
+                        "path": str(f),
+                    })
 
     return operators
 
@@ -287,9 +411,17 @@ def run(args):
     os.makedirs(log_dir, exist_ok=True)
 
     # Scan operators
-    operators = scan_operators(config)
+    ops_filter = None
     if args.operator:
-        operators = [op for op in operators if op["name"] in args.operator]
+        ops_filter = args.operator
+    elif args.ops_list or config.get("ops_list"):
+        ops_list_path = args.ops_list or config.get("ops_list")
+        if not os.path.isabs(ops_list_path):
+            ops_list_path = os.path.join(str(SCRIPT_DIR), ops_list_path)
+        ops_filter = load_ops_list(ops_list_path)
+        logger.info(f"Loaded {len(ops_filter)} operators from {ops_list_path}")
+
+    operators = scan_operators(config, ops_filter=ops_filter)
     if args.vendor:
         operators = [op for op in operators if op["vendor"] in args.vendor]
     if args.limit:
@@ -427,6 +559,7 @@ def main():
     parser = argparse.ArgumentParser(description="Triton 算子合规性检查工具")
     parser.add_argument("-c", "--config", help="Path to config.yaml")
     parser.add_argument("-o", "--operator", nargs="*", help="Only check specific operator(s)")
+    parser.add_argument("--ops-list", help="Path to operator list file (one op per line)")
     parser.add_argument("--vendor", nargs="*", help="Only check specific vendor(s)")
     parser.add_argument("--limit", type=int, help="Limit number of operators to check")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")

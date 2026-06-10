@@ -1,8 +1,15 @@
-**/results/
+# 运行时输出
+results/
 **/logs_*/
 *.log
 *.jsonl
+
+# Python
 __pycache__/
+
+# Claude Code 运行时配置（程序自动生成）
 **/.claude_config/
+
+# 敏感文件
 .env
 **/.env
