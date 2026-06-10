@@ -16,3 +16,9 @@ __pycache__/
 # 敏感文件
 .env
 **/.env
+
+# Auto-Gen specific exclusions
+auto_gen/results/
+auto_gen/*.txt
+!auto_gen/ops_list_example.txt
+!auto_gen/.env.example

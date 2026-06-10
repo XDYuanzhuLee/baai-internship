@@ -6,6 +6,7 @@ BAAI 实习期间积累的各类自动化脚本和工具集合。
 
 | 脚本 | 说明 | 入口 |
 |------|------|------|
+| [auto_gen](./auto_gen/) | FlagGems 算子自动生成工具 — 基于 Claude Code 的自动化编排系统，支持多 GPU 并行和多硬件后端（CUDA/MetaX/Iluvatar） | `python3 ./auto_gen/orchestrator.py` |
 | [triton_check](./triton_check/) | Triton 算子合规性检查工具 — 通过 Claude Code CLI 调用大模型，自动审查 FlagGems 算子是否使用了真正的 Triton kernel 实现 | `./triton_check/run.sh` |
 | [batch_pr_submit](./batch_pr_submit/) | FlagGems 算子批量提 PR 工具 — 遍历算子列表自动提交 PR，支持并行 worktree 隔离 | `./batch_pr_submit/batch_submit.sh` |
 | [ci_performance_update](./ci_performance_update/) | CI 性能数据更新 — 从 CI 结果提取 speedup 数据更新到 PR 描述，审计 H20 性能 | `./ci_performance_update/update_pr_performance_from_ci.py` |
