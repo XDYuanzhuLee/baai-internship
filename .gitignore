@@ -6,6 +6,9 @@ reports/
 *.log
 *.jsonl
 output.md
+deepseek-workflow/tasks/
+deepseek-workflow/tmp/
+github_reviews/results/
 
 # Python
 __pycache__/

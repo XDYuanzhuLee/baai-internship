@@ -243,7 +243,7 @@ def is_actionable_external(event: dict, author: str) -> bool:
     if event["kind"] in {"review_comment", "issue_comment"}:
         return True
     if event["kind"] == "review":
-        return event.get("review_state") in {"CHANGES_REQUESTED", "COMMENTED"} and bool(event.get("body", "").strip())
+        return event.get("review_state") in {"CHANGES_REQUESTED", "COMMENTED", "DISMISSED"} and bool(event.get("body", "").strip())
     return False
 
 
